@@ -1,0 +1,67 @@
+title: Från central kontroll till gemensam riktning
+subtitle: Enterprise arkitektur i en decentraliserad organisation på väg från XLPM
+  till agilt arbetssätt
+author: Erland Lindmark
+language: sv
+difficulty: experienced
+audience: Enterprise arkitekter, arkitekturledare, utvecklingsledare och chefer i
+  decentraliserade utvecklingsorganisationer
+book_type: textbook
+edition: '1'
+version: '0.12'
+date: '2026-05-15'
+rights: All rights reserved
+publisher: ''
+cover_image: assets/cover/cover.png
+identifier: urn:uuid:bcd46bd6-d464-4b74-a573-ebfafcbc25ac
+creator_role: aut
+subject: Enterprise arkitektur, agil styrning, decentraliserad arkitekturorganisation
+description: En praktisk lärobok om hur enterprise arkitektur förändras när en organisation
+  går från XLPM-präglad faslogik till mer agila arbetssätt med fördelat arkitekturansvar.
+project_slug: fran-central-kontroll-till-gemensam-riktning
+zip_naming:
+  initial: fran-central-kontroll-till-gemensam-riktning-projekt.zip
+  chapter_update: fran-central-kontroll-till-gemensam-riktning-projekt-kapitel-NN.zip
+chapters:
+- chapters/00-inledning.md
+- chapters/01-nar-enterprise-arkitektur-inte-langre-kan-agas-centralt.md
+- chapters/02-fran-xlpm-logik-till-agil-utvecklingslogik.md
+- chapters/03-den-centrala-utvecklingsfunktionens-nya-uppdrag.md
+- chapters/04-utvecklingsomradets-arkitekturansvar.md
+- chapters/05-gemensam-riktning-utan-detaljstyrning.md
+- chapters/06-arkitekturforum-som-stod-for-beslut.md
+- chapters/07-behov-initiativ-och-arkitekturell-paverkan.md
+- chapters/08-beroenden-mellan-utvecklingsomraden.md
+- chapters/09-gemensamma-formagor-plattformar-och-standarder.md
+- chapters/10-arkitekturdokumentation-som-gemensamt-minne.md
+- chapters/11-matning-uppfoljning-och-kvalitet.md
+- chapters/12-hallbar-decentraliserad-arkitekturformaga.md
+planned_chapters:
+- chapters/00-inledning.md
+- chapters/01-nar-enterprise-arkitektur-inte-langre-kan-agas-centralt.md
+- chapters/02-fran-xlpm-logik-till-agil-utvecklingslogik.md
+- chapters/03-den-centrala-utvecklingsfunktionens-nya-uppdrag.md
+- chapters/04-utvecklingsomradets-arkitekturansvar.md
+- chapters/05-gemensam-riktning-utan-detaljstyrning.md
+- chapters/06-arkitekturforum-som-stod-for-beslut.md
+- chapters/07-behov-initiativ-och-arkitekturell-paverkan.md
+- chapters/08-beroenden-mellan-utvecklingsomraden.md
+- chapters/09-gemensamma-formagor-plattformar-och-standarder.md
+- chapters/10-arkitekturdokumentation-som-gemensamt-minne.md
+- chapters/11-matning-uppfoljning-och-kvalitet.md
+- chapters/12-hallbar-decentraliserad-arkitekturformaga.md
+exports:
+  epub:
+    enabled: true
+    include_text_toc: false
+    airy_layout: true
+    render_markdown_styles: true
+  pdf:
+    enabled: true
+    include_toc_before_introduction: true
+    render_markdown_styles: true
+  docx:
+    enabled: true
+    render_markdown_styles: true
+  markdown:
+    enabled: true
