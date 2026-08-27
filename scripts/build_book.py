@@ -140,8 +140,9 @@ def main() -> int:
             "--output", str(epub),
             "--metadata-file", str(metadata_path),
             "--css", str(root/"publishing/epub.css"),
+            "--lua-filter", str(root/"publishing/pdf-filter.lua"),
             "--epub-cover-image", str(cover),
-            "--toc", "--toc-depth=2", "--split-level=1",
+            "--toc", "--toc-depth=1", "--split-level=1",
         ]
         subprocess.run(cmd, cwd=root, check=True)
         validate_epub(epub, len(chapters))

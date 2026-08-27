@@ -33,6 +33,9 @@
 \clubpenalty=10000
 \raggedbottom
 
+% Endast översta rubriknivån i innehållsförteckningen.
+\setcounter{tocdepth}{0}
+
 \pagestyle{fancy}
 \fancyhf{}
 \fancyfoot[C]{\small\thepage}
@@ -41,6 +44,35 @@
 
 \providecommand{\tightlist}{%
   \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+% Kapitelstart: två centrerade, kompakta rader utan LaTeX-bokens automatiska "Chapter N".
+\newcommand{\bookchapter}[2]{%
+  \clearpage
+  \phantomsection
+  \addcontentsline{toc}{chapter}{Kapitel #1: #2}%
+  \markboth{Kapitel #1: #2}{Kapitel #1: #2}%
+  \thispagestyle{plain}%
+  \vspace*{6mm}%
+  \begin{center}
+    {\fontsize{13}{14}\selectfont\bfseries Kapitel #1\par}
+    \vspace{1.2mm}
+    {\fontsize{13}{14}\selectfont\bfseries #2\par}
+  \end{center}
+  \vspace{5mm}%
+}
+
+\newcommand{\bookintro}[1]{%
+  \clearpage
+  \phantomsection
+  \addcontentsline{toc}{chapter}{#1}%
+  \markboth{#1}{#1}%
+  \thispagestyle{plain}%
+  \vspace*{6mm}%
+  \begin{center}
+    {\fontsize{13}{14}\selectfont\bfseries #1\par}
+  \end{center}
+  \vspace{5mm}%
+}
+
 \begin{document}
 
 $if(cover-image)$
