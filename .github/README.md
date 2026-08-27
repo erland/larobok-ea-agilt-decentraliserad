@@ -1,14 +1,12 @@
-# GitHub Actions för läroboken
+# GitHub Actions
 
-Den här katalogen ligger i repositoryts rot, på samma nivå som `README.md`.
+Workflows är anpassade till Lärobokskaparens projektstruktur.
 
-Workflows och stödskript är införda utifrån det bifogade GitHub Actions-publiceringskitet och
-anpassade till lärobokens projektstruktur:
+- `01-validate.yml`: validerar struktur, metadata, kapitelordning och interna Markdown-länkar.
+- `02-build-preview.yml`: manuell preview-build av EPUB och PDF som GitHub Actions-artifact.
+- `03-release.yml`: bygger EPUB/PDF och bifogar dem till en GitHub Release när en `v*`-tagg pushas.
 
-- kapitel: `chapters/`
-- exportmetadata: `docs/export-metadata.yaml`
-- omslag: `assets/cover/cover.png`
-- bygg-/publiceringsstöd: `scripts/` och/eller `publishing/` enligt kitet
-
-Kontrollera repositoryts Actions-flik efter första pushen. Eventuella externa verktyg som
-Pandoc/XeLaTeX installeras av workflow-filerna enligt publiceringskitets upplägg.
+Kanoniska sökvägar:
+- `chapters/`
+- `docs/export-metadata.yaml`
+- `assets/cover/cover.png`

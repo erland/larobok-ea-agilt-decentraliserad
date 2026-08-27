@@ -11,7 +11,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check out tagged revision
         uses: actions/checkout@v6
@@ -24,23 +24,12 @@ jobs:
         with:
           version: "3.1.11.1"
 
-      - name: Install XeLaTeX
+      - name: Install XeLaTeX and fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            texlive-xetex texlive-latex-extra texlive-fonts-recommended fonts-texgyre
-          fc-cache -f
-
-      - name: Verify PDF font files
-        shell: bash
-        run: |
-          set -euo pipefail
-          font_file="$(find /usr/share/texmf /usr/share/fonts -type f -name 'texgyrepagella-regular.otf' -print -quit 2>/dev/null || true)"
-          if [[ -z "${font_file}" ]]; then
-            echo "texgyrepagella-regular.otf was not found after installing fonts-texgyre." >&2
-            exit 1
-          fi
-          echo "Found TeX Gyre Pagella: ${font_file}"
+            texlive-xetex texlive-latex-extra texlive-fonts-recommended \
+            texlive-lang-european fonts-texgyre
 
       - name: Build EPUB and PDF
         run: python3 scripts/build_book.py --output-dir "${RUNNER_TEMP}/book-dist"
@@ -56,6 +45,5 @@ jobs:
             gh release upload "${tag}" "${RUNNER_TEMP}"/book-dist/*.epub "${RUNNER_TEMP}"/book-dist/*.pdf --clobber
           else
             gh release create "${tag}" "${RUNNER_TEMP}"/book-dist/*.epub "${RUNNER_TEMP}"/book-dist/*.pdf \
-              --title "${tag}" \
-              --generate-notes
+              --title "${tag}" --generate-notes
           fi

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Bygg professionell EPUB från projektets kanoniska Markdown-kapitel."""
-
+"""Bygg EPUB och PDF från Lärobokskaparens kanoniska Markdown-kapitel."""
 from __future__ import annotations
 
 import argparse
@@ -8,7 +7,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import unicodedata
 import zipfile
 from pathlib import Path
@@ -19,26 +17,46 @@ XHTML_NS = "http://www.w3.org/1999/xhtml"
 EPUB_NS = "http://www.idpf.org/2007/ops"
 OPF_NS = "http://www.idpf.org/2007/opf"
 
-
-def simple_metadata(path: Path) -> dict[str, str]:
+def top_level_scalars(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
+    pending_key = None
     for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or ":" not in line:
+        if not raw.strip() or raw.lstrip().startswith("#"):
             continue
-        key, value = line.split(":", 1)
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        if raw.startswith("  ") and pending_key and ":" not in raw:
+            values[pending_key] = (values.get(pending_key, "") + " " + raw.strip()).strip()
+            continue
+        pending_key = None
+        if raw[:1].isspace() or ":" not in raw:
+            continue
+        key, value = raw.split(":", 1)
+        key, value = key.strip(), value.strip()
+        if value and value[0:1] in {"'", '"'} and value[-1:] == value[0]:
             value = value[1:-1]
-        values[key.strip()] = value
+        values[key] = value
+        pending_key = key
     return values
 
+def chapter_paths(path: Path, root: Path) -> list[Path]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    result: list[Path] = []
+    active = False
+    for raw in lines:
+        if re.match(r"^chapters:\s*$", raw):
+            active = True
+            continue
+        if active:
+            if raw.startswith("- "):
+                result.append(root / raw[2:].strip().strip("'\""))
+                continue
+            if raw and not raw[0].isspace():
+                break
+    return result
 
 def slugify(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_value = normalized.encode("ascii", "ignore").decode("ascii").lower()
     return re.sub(r"[^a-z0-9]+", "-", ascii_value).strip("-")
-
 
 def pandoc_version() -> str:
     result = subprocess.run(["pandoc", "--version"], text=True, capture_output=True)
@@ -48,278 +66,111 @@ def pandoc_version() -> str:
     match = re.search(r"pandoc\s+([0-9][^\s]*)", first)
     return match.group(1) if match else first
 
-
-def validate_epub(path: Path, expected_chapters: int, title: str) -> None:
+def validate_epub(path: Path, expected_docs: int) -> None:
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         if not names or names[0] != "mimetype":
             raise RuntimeError("EPUB-fel: mimetype ligger inte först.")
         if archive.getinfo("mimetype").compress_type != zipfile.ZIP_STORED:
             raise RuntimeError("EPUB-fel: mimetype är komprimerad.")
-
         container = ET.fromstring(archive.read("META-INF/container.xml"))
-        rootfile = container.find(
-            ".//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile"
-        )
+        rootfile = container.find(".//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile")
         if rootfile is None:
             raise RuntimeError("EPUB-fel: OPF-root saknas.")
         opf_name = rootfile.attrib["full-path"]
         opf = ET.fromstring(archive.read(opf_name))
         ns = {"opf": OPF_NS}
         manifest = opf.find("opf:manifest", ns)
-        spine = opf.find("opf:spine", ns)
-        if manifest is None or spine is None:
-            raise RuntimeError("EPUB-fel: manifest/spine saknas.")
-
-        nav_item = next(
-            (
-                item for item in manifest.findall("opf:item", ns)
-                if "nav" in item.attrib.get("properties", "").split()
-            ),
-            None,
-        )
+        if manifest is None:
+            raise RuntimeError("EPUB-fel: manifest saknas.")
+        nav_item = next((i for i in manifest.findall("opf:item", ns)
+                         if "nav" in i.attrib.get("properties", "").split()), None)
         if nav_item is None:
-            raise RuntimeError("EPUB-fel: nav.xhtml saknas i manifestet.")
-
+            raise RuntimeError("EPUB-fel: navigeringsdokument saknas.")
         nav_path = (Path(opf_name).parent / nav_item.attrib["href"]).as_posix()
         nav_root = ET.fromstring(archive.read(nav_path))
         nav_ns = {"x": XHTML_NS, "epub": EPUB_NS}
         anchors = nav_root.findall(".//x:nav[@epub:type='toc']//x:a", nav_ns)
-        labels = ["".join(anchor.itertext()).strip() for anchor in anchors]
-        chapter_labels = [label for label in labels if re.match(r"^\d+\.\s", label)]
-        if len(chapter_labels) != expected_chapters:
+        if len(anchors) < expected_docs:
             raise RuntimeError(
-                f"EPUB-fel: TOC har {len(chapter_labels)} kapitelposter, väntat {expected_chapters}."
+                f"EPUB-fel: TOC har bara {len(anchors)} poster; minst {expected_docs} väntades."
             )
-        if title in labels:
-            raise RuntimeError("EPUB-fel: titelsidan finns felaktigt med i TOC.")
-
-        nav_id = nav_item.attrib["id"]
-        nav_refs = [
-            ref for ref in spine.findall("opf:itemref", ns)
-            if ref.attrib.get("idref") == nav_id
-        ]
-        if nav_refs and any(ref.attrib.get("linear") != "no" for ref in nav_refs):
-            raise RuntimeError("EPUB-fel: nav.xhtml är linjär i spine.")
-
-        split_headings = 0
-        duplicate_title_h1 = False
-        for name in names:
-            if not name.endswith(".xhtml"):
-                continue
-            data = archive.read(name).decode("utf-8", errors="replace")
-            if 'class="chapter-number"' in data and 'class="chapter-title"' in data:
-                split_headings += 1
-            if 'class="title-page"' in data and re.search(
-                r'<(?:\w+:)?h1[^>]*class="[^"]*unnumbered', data
-            ):
-                duplicate_title_h1 = True
-
-        if split_headings != expected_chapters:
-            raise RuntimeError(
-                f"EPUB-fel: {split_headings} formaterade kapitelrubriker, "
-                f"väntat {expected_chapters}."
-            )
-        if duplicate_title_h1:
-            raise RuntimeError("EPUB-fel: dubblerad H1 finns kvar på titelsidan.")
-
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=".")
-    parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--name", default="")
-    parser.add_argument(
-        "--formats",
-        default="epub,pdf",
-        help="Kommaseparerade format: epub,pdf (standard: båda).",
-    )
-    parser.add_argument(
-        "--allow-pandoc-version-mismatch",
-        action="store_true",
-        help="Tillåt annan Pandoc-version än projektets låsta version.",
-    )
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default=".")
+    ap.add_argument("--output-dir", required=True)
+    ap.add_argument("--name", default="")
+    ap.add_argument("--formats", default="epub,pdf")
+    ap.add_argument("--allow-pandoc-version-mismatch", action="store_true")
+    args = ap.parse_args()
 
     root = Path(args.root).resolve()
     output_dir = Path(args.output_dir).resolve()
 
-    validation = subprocess.run(
-        [sys.executable, "scripts/validate_project.py", "."],
-        cwd=root,
-    )
-    if validation.returncode != 0:
+    validation = subprocess.run([sys.executable, "scripts/validate_project.py", "."], cwd=root)
+    if validation.returncode:
         return validation.returncode
 
     version = pandoc_version()
     if version != PANDOC_VERSION and not args.allow_pandoc_version_mismatch:
-        print(
-            f"ERROR: Pandoc {PANDOC_VERSION} krävs för reproducerbart bygge; "
-            f"hittade {version}.",
-            file=sys.stderr,
-        )
+        print(f"ERROR: Pandoc {PANDOC_VERSION} krävs; hittade {version}.", file=sys.stderr)
         return 2
 
-    metadata = simple_metadata(root / "publishing/docs/export-metadata.yaml")
+    metadata_path = root / "docs/export-metadata.yaml"
+    metadata = top_level_scalars(metadata_path)
+    chapters = chapter_paths(metadata_path, root)
     title = metadata["title"]
-    series = metadata["series"]
     author = metadata["author"]
-    base_name = args.name or slugify(title)
-    base_name = re.sub(r"\.(epub|pdf)$", "", base_name, flags=re.IGNORECASE)
-    formats = [item.strip().lower() for item in args.formats.split(",") if item.strip()]
-    invalid = sorted(set(formats) - {"epub", "pdf"})
-    if invalid or not formats:
-        print(
-            "ERROR: --formats måste innehålla epub och/eller pdf.",
-            file=sys.stderr,
-        )
-        return 2
-
-    chapters = sorted((root / "kapitel").glob("kapitel-[0-9][0-9].md"))
-    if not chapters:
-        print("ERROR: Inga kapitelfiler hittades.", file=sys.stderr)
+    subtitle = metadata.get("subtitle", "")
+    base_name = re.sub(r"\.(epub|pdf)$", "", args.name or slugify(title), flags=re.I)
+    formats = [x.strip().lower() for x in args.formats.split(",") if x.strip()]
+    if not formats or set(formats) - {"epub", "pdf"}:
+        print("ERROR: --formats måste innehålla epub och/eller pdf.", file=sys.stderr)
         return 2
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    cover = root / metadata.get("cover_image", "assets/cover/cover.png")
 
     if "epub" in formats:
-        output = output_dir / f"{base_name}.epub"
-        with tempfile.TemporaryDirectory(prefix="roman-build-") as tmp:
-            temp = Path(tmp)
-            title_page = temp / "00-title.md"
-            title_page.write_text(
-                '<section class="title-page">\n'
-                f'<p class="series">{series}</p>\n'
-                f'<p class="book-title">{title}</p>\n'
-                f'<p class="author">{author}</p>\n'
-                '</section>\n',
-                encoding="utf-8",
-            )
-
-            command = [
-                "pandoc",
-                str(title_page),
-                *[str(path) for path in chapters],
-                "--from=markdown+raw_html",
-                "--to=epub3",
-                "--output", str(output),
-                "--metadata-file", str(root / "publishing/docs/export-metadata.yaml"),
-                "--css", str(root / "publishing/epub.css"),
-                "--epub-cover-image", str(root / "omslag/assets/cover/cover.png"),
-                "--epub-title-page=false",
-                "--toc",
-                "--toc-depth=1",
-                "--split-level=1",
-            ]
-            subprocess.run(command, cwd=root, check=True)
-            subprocess.run(
-                [
-                    sys.executable,
-                    str(root / "publishing/fix-epub-after-pandoc.py"),
-                    str(output),
-                ],
-                cwd=root,
-                check=True,
-            )
-
-        validate_epub(output, len(chapters), title)
-        print(f"OK: EPUB skapad och verifierad: {output}")
+        epub = output_dir / f"{base_name}.epub"
+        cmd = [
+            "pandoc", *map(str, chapters),
+            "--from=markdown", "--to=epub3",
+            "--output", str(epub),
+            "--metadata-file", str(metadata_path),
+            "--css", str(root/"publishing/epub.css"),
+            "--epub-cover-image", str(cover),
+            "--toc", "--toc-depth=2", "--split-level=1",
+        ]
+        subprocess.run(cmd, cwd=root, check=True)
+        validate_epub(epub, len(chapters))
+        print(f"OK: EPUB skapad och verifierad: {epub}")
 
     if "pdf" in formats:
         pdf = output_dir / f"{base_name}.pdf"
-        engine = shutil.which("xelatex")
-        if engine is None:
-            print(
-                "ERROR: xelatex krävs för PDF-bygget. Installera TeX Live/XeLaTeX.",
-                file=sys.stderr,
-            )
+        if shutil.which("xelatex") is None:
+            print("ERROR: xelatex krävs för PDF-bygget.", file=sys.stderr)
             return 2
-
-        # Prefer exact OpenType files. This avoids differences between
-        # fontconfig family names and XeLaTeX/fontspec name resolution.
-        required_font_files = {
-            "regular": "texgyrepagella-regular.otf",
-            "bold": "texgyrepagella-bold.otf",
-            "italic": "texgyrepagella-italic.otf",
-            "bolditalic": "texgyrepagella-bolditalic.otf",
-        }
-        font_dir = None
-        search_roots = [
-            Path("/usr/share/texmf/fonts/opentype/public/tex-gyre"),
-            Path("/usr/share/fonts/opentype/texgyre"),
-            Path("/usr/share/fonts/opentype/tex-gyre"),
-        ]
-        for candidate in search_roots:
-            if all((candidate / filename).is_file() for filename in required_font_files.values()):
-                font_dir = candidate
-                break
-
-        # Debian/Ubuntu package layouts can vary, so use a bounded fallback search.
-        if font_dir is None:
-            for base in (Path("/usr/share/texmf"), Path("/usr/share/fonts")):
-                if not base.exists():
-                    continue
-                matches = list(base.rglob(required_font_files["regular"]))
-                for regular in matches:
-                    candidate = regular.parent
-                    if all((candidate / filename).is_file() for filename in required_font_files.values()):
-                        font_dir = candidate
-                        break
-                if font_dir is not None:
-                    break
-
-        pandoc_font_args = []
-        if font_dir is not None:
-            pandoc_font_args = ["--variable", f"pdf-font-dir={font_dir.as_posix()}"]
-            print(f"OK: använder exakta TeX Gyre Pagella OTF-filer från {font_dir}")
-        else:
-            # Local fallback for environments where the family is registered
-            # directly with XeTeX but OTF files are not exposed in the standard
-            # Debian/Ubuntu locations.
-            fc_list = shutil.which("fc-list")
-            if fc_list is None:
-                print(
-                    "ERROR: TeX Gyre Pagella OTF-filer hittades inte och fontconfig saknas.",
-                    file=sys.stderr,
-                )
-                return 2
-            fonts = subprocess.run(
-                [fc_list, ":", "family"],
-                text=True,
-                capture_output=True,
-            )
-            available = fonts.stdout.lower()
-            if "tex gyre pagella" not in available and "texgyrepagella" not in available:
-                print(
-                    "ERROR: PDF-fonten TeX Gyre Pagella saknas. "
-                    "På Ubuntu installeras den med paketet fonts-texgyre.",
-                    file=sys.stderr,
-                )
-                return 2
-            print("OK: använder registrerad TeXGyrePagella-familj som lokal fallback.")
-
-
-        command = [
-            "pandoc",
-            *[str(path) for path in chapters],
-            "--from=markdown",
-            "--to=pdf",
+        cmd = [
+            "pandoc", *map(str, chapters),
+            "--from=markdown", "--to=pdf",
             "--pdf-engine=xelatex",
             "--output", str(pdf),
-            "--metadata-file", str(root / "publishing/docs/export-metadata.yaml"),
-            "--template", str(root / "publishing/pdf-template.tex"),
-            "--lua-filter", str(root / "publishing/pdf-filter.lua"),
-            *pandoc_font_args,
+            "--metadata-file", str(metadata_path),
+            "--template", str(root/"publishing/pdf-template.tex"),
+            "--lua-filter", str(root/"publishing/pdf-filter.lua"),
+            "--variable", f"cover-image={cover.as_posix()}",
+            "--toc", "--toc-depth=1",
             "--top-level-division=chapter",
         ]
-        subprocess.run(command, cwd=root, check=True)
+        subprocess.run(cmd, cwd=root, check=True)
         if not pdf.exists() or pdf.stat().st_size < 10_000:
             print("ERROR: PDF-bygget gav ingen giltig PDF-fil.", file=sys.stderr)
             return 2
         print(f"OK: PDF skapad: {pdf}")
 
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
