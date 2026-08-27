@@ -1,0 +1,50 @@
+@charset "UTF-8";
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0 6%;
+  font-family: "Literata", "Charis SIL", "Noto Serif", Georgia, serif;
+  font-size: 1em;
+  line-height: 1.58;
+  text-align: left;
+  widows: 2;
+  orphans: 2;
+  hyphens: auto;
+}
+p { margin: 0 0 0.75em; }
+h1 { margin: 1.1em 0 0.6em; font-size: 1.75em; line-height: 1.18; }
+h2 { margin: 1.4em 0 0.45em; font-size: 1.35em; line-height: 1.2; }
+h3 { margin: 1.2em 0 0.4em; font-size: 1.15em; line-height: 1.25; }
+h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+ul, ol { margin: 0.4em 0 1em 1.4em; padding: 0; }
+li { margin: 0.22em 0; }
+blockquote {
+  margin: 1em 0.8em;
+  padding-left: 0.9em;
+  border-left: 0.18em solid #888;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.1em 0;
+  font-size: 0.9em;
+}
+th, td {
+  border: 1px solid #888;
+  padding: 0.4em 0.5em;
+  vertical-align: top;
+}
+th { font-weight: 700; }
+code { font-family: "Noto Sans Mono", "Courier New", monospace; font-size: 0.9em; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 0.7em;
+  border: 1px solid #aaa;
+  font-family: "Noto Sans Mono", "Courier New", monospace;
+  font-size: 0.86em;
+  line-height: 1.35;
+}
+img { max-width: 100%; height: auto; }
+figure { margin: 1em 0; }
+figcaption { font-size: 0.9em; font-style: italic; }
